@@ -1,0 +1,16 @@
+h1 {
+  text-align: center;
+  }
+.col-auto{
+        text-align: center;
+        padding-left: 2%;
+        padding-top: 2%;
+}
+.formFile{
+    width:40%;
+}
+.form-inline {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+}

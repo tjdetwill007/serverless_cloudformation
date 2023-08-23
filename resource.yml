@@ -1,0 +1,106 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: Lambda, S3, API gateway
+
+
+
+##RESOURCES##
+
+Resources:
+##### Creating a role for lambda function ######
+  Lambdarole1:
+      Type: AWS::IAM::Role
+      Properties: 
+        AssumeRolePolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Principal:
+                  Service: 
+                    - lambda.amazonaws.com
+                Action: sts:AssumeRole
+        ManagedPolicyArns: 
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaRole
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+          - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        RoleName: lambdaRoleDemo #Lambda Role Name
+
+####### LAMBDA FUNCTION CREATION #########
+
+  LambdaFunction:
+      Type: AWS::Lambda::Function
+      Properties: 
+        FunctionName: MyTaskLambda #Lambda Function Name
+        Handler: index.lambda_handler
+        Runtime: python3.9
+        Code:
+          ZipFile: |
+            import boto3
+            import json
+            def lambda_handler(event,context):
+                s3 = boto3.resource('s3')
+                my_bucket = s3.Bucket('mytestlambdaapi')
+                data=[]
+                for my_bucket_object in my_bucket.objects.all():
+                      data.append(my_bucket_object.key)
+                json_string = json.dumps(data, indent=4)
+                return(json_string)
+  
+             
+        Role: !GetAtt Lambdarole1.Arn
+
+  mybucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: mytestlambdaapi #BucketName
+
+  ###CREATING REST API###
+
+  MyRestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Description: A test API
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Name: MyRestAPI2
+  
+
+######### API METHOD ###########
+
+  MyApiMethod:
+    Type: AWS::ApiGateway::Method
+    Properties: 
+      HttpMethod: GET
+      AuthorizationType: NONE
+      ResourceId: !GetAtt MyRestApi.RootResourceId
+      RestApiId: !Ref MyRestApi
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaFunction}/invocations'
+        IntegrationResponses:
+          - StatusCode: 200
+      MethodResponses: 
+        - StatusCode: 200
+
+##### ADDING LAMBDA PERMISSION FOR INVOCATION FROM API_GATEWAY ####
+  S3InvokeLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref LambdaFunction #LambdaFunctionName
+      Action: lambda:InvokeFunction      
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MyRestApi}/*/GET/"
+
+######## Deployment of API Gateway for the Testing Stage ###########
+  MyApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties: 
+      RestApiId: !Ref MyRestApi
+      StageName: Test
+    DependsOn: MyApiMethod
+
+
+
+        
